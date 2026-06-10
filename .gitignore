@@ -1,0 +1,26 @@
+# Build output
+build/
+*.elf
+*.3dsx
+*.smdh
+*.cia
+*.map
+
+# Fichiers temporaires
+*.o
+*.d
+
+# Logs de debug SD
+debug.log
+
+# IDE / éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
