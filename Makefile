@@ -53,7 +53,7 @@ CXXFLAGS    := $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 ASFLAGS :=  -g $(ARCH)
 LDFLAGS =   -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS    := -lcitro2d -lcitro3d -lz -lctru -lm
+LIBS    := -lcitro2d -lcitro3d -ljansson -lz -lctru -lm
 
 #---------------------------------------------------------------------------------
 LIBDIRS := $(CTRULIB) $(PORTLIBS)

@@ -54,57 +54,6 @@ static void _get_parent_dir(const char *filepath, char *out, size_t out_size)
     if (slash) *slash = '\0'; else out[0] = '\0';
 }
 
-/* Obtient la taille du fichier via une requête HEAD */
-static u32 _get_file_size(const char *url)
-{
-    httpcContext ctx;
-    u32 status = 0;
-    u32 size = 0;
-
-    Result ret = httpcOpenContext(&ctx, HTTPC_METHOD_GET, url, 1);
-    if (R_FAILED(ret)) return 0;
-
-    httpcSetSSLOpt(&ctx, SSLCOPT_DisableVerify);
-    httpcAddRequestHeaderField(&ctx, "User-Agent",
-                               "IEGO-Patcher/1.0 (Nintendo 3DS)");
-    /* Range 0-0 pour juste récupérer les headers sans télécharger */
-    httpcAddRequestHeaderField(&ctx, "Range", "bytes=0-0");
-
-    ret = httpcBeginRequest(&ctx);
-    if (R_FAILED(ret)) { httpcCancelConnection(&ctx); httpcCloseContext(&ctx); return 0; }
-
-    ret = httpcGetResponseStatusCodeTimeout(&ctx, &status, 10000000000ULL);
-    if (R_FAILED(ret) || (status != 200 && status != 206)) {
-        httpcCancelConnection(&ctx);
-        httpcCloseContext(&ctx);
-        return 0;
-    }
-
-    /* Content-Range: bytes 0-0/TOTAL */
-    char content_range[64] = {0};
-    if (httpcGetResponseHeader(&ctx, "Content-Range",
-                               content_range, sizeof(content_range)) == 0) {
-        /* Format: "bytes 0-0/1160799359" */
-        char *slash = strrchr(content_range, '/');
-        if (slash) size = (u32)atol(slash + 1);
-    }
-
-    /* Fallback : Content-Length si pas de Content-Range */
-    if (size == 0) {
-        httpcGetDownloadSizeState(&ctx, NULL, &size);
-    }
-
-    /* Vide le buffer (1 octet) */
-    u8 tmp;
-    u32 read;
-    httpcReceiveDataTimeout(&ctx, &tmp, 1, 5000000000ULL);
-    (void)read;
-
-    httpcCancelConnection(&ctx);
-    httpcCloseContext(&ctx);
-    return size;
-}
-
 /* ── API publique ─────────────────────────────────────────────────────────── */
 
 bool patcher_extract_zip(const char *zip_path,
@@ -232,23 +181,14 @@ bool patcher_install(const char *url,
                      PatchProgressCb progress_cb,
                      void *userdata)
 {
-    /* ── Étape 1 : taille du fichier ── */
-    if (status_cb) status_cb("Recuperation taille...", userdata);
-    if (progress_cb) progress_cb(-1.0, 0, 0, userdata);
-
-    u32 file_size = _get_file_size(url);
-    printf("[patcher] Taille: %" PRIu32 " octets\n", file_size);
-    if (file_size == 0) {
-        printf("[patcher] Impossible d'obtenir la taille\n");
-        return false;
-    }
-
-    /* ── Étape 2 : téléchargement par tranches ── */
+    /* ── Étape 1 : téléchargement ── */
+    /* total_size=0 : httpc détermine lui-même la taille via Content-Length */
     if (status_cb) status_cb("Telechargement...", userdata);
+    if (progress_cb) progress_cb(-1.0, 0, 0, userdata);
 
     DlProgressAdaptor adaptor = { progress_cb, userdata };
 
-    if (!network_download_file(url, temp_zip, file_size,
+    if (!network_download_file(url, temp_zip, 0,
                                _dl_progress_adaptor, &adaptor)) {
         printf("[patcher] Echec telechargement\n");
         patcher_cleanup(temp_zip);

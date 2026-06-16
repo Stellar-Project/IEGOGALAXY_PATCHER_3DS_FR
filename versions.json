@@ -1,0 +1,22 @@
+{
+  "patcher_latest": "1.0.0",
+  "patcher_download": "https://github.com/Stellar-Project/IEGOGALAXY_PATCHER_FR/releases/latest/download/iego_patcher.3dsx",
+  "versions": [
+    {
+      "version": "2.0",
+      "date": "Prochainement",
+      "notes": "Traduction complete",
+      "coming_soon": true,
+      "bigbang_url": "",
+      "supernova_url": ""
+    },
+    {
+      "version": "1.0",
+      "date": "2024-06-28",
+      "notes": "Version initiale",
+      "coming_soon": false,
+      "bigbang_url": "http://iegogalaxy.fr/downloads/patch/v1.0/patch_bigbang_fr.zip",
+      "supernova_url": "http://iegogalaxy.fr/downloads/patch/v1.0/patch_supernova_fr.zip"
+    }
+  ]
+}
