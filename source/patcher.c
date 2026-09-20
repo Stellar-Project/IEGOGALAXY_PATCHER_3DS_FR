@@ -177,12 +177,12 @@ bool patcher_cleanup(const char *zip_path)
 bool patcher_install(const char *url,
                      const char *temp_zip,
                      const char *dest_dir,
+                     const char *version,
+                     int selection,
                      PatchStatusCb   status_cb,
                      PatchProgressCb progress_cb,
                      void *userdata)
 {
-    /* ── Étape 1 : téléchargement ── */
-    /* total_size=0 : httpc détermine lui-même la taille via Content-Length */
     if (status_cb) status_cb("Telechargement...", userdata);
     if (progress_cb) progress_cb(-1.0, 0, 0, userdata);
 
@@ -195,7 +195,15 @@ bool patcher_install(const char *url,
         return false;
     }
 
-    /* ── Étape 3 : extraction ── */
+    const char *tid = (selection == 1) ? "000400000010BB00" : "000400000010BA00";
+    char romfs_path[256];
+    char backup_path[256];
+    snprintf(romfs_path, sizeof(romfs_path), "sdmc:/luma/titles/%s/romfs", tid);
+    snprintf(backup_path, sizeof(backup_path), "sdmc:/luma/titles/%s/romfs.bak", tid);
+
+    if (status_cb) status_cb("Sauvegarde...", userdata);
+    rename(romfs_path, backup_path);
+
     if (!patcher_extract_zip(temp_zip, dest_dir,
                              status_cb, progress_cb, userdata)) {
         printf("[patcher] Echec extraction\n");
@@ -203,7 +211,16 @@ bool patcher_install(const char *url,
         return false;
     }
 
-    /* ── Étape 4 : nettoyage ── */
+    if (version && version[0]) {
+        char ver_path[256];
+        snprintf(ver_path, sizeof(ver_path), "sdmc:/luma/titles/%s/patch_version.txt", tid);
+        FILE *vf = fopen(ver_path, "w");
+        if (vf) {
+            fprintf(vf, "%s\n", version);
+            fclose(vf);
+        }
+    }
+
     if (status_cb) status_cb("Nettoyage...", userdata);
     patcher_cleanup(temp_zip);
 

@@ -3,6 +3,7 @@
 #include <stdarg.h>
 #include <math.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #include <3ds.h>
 #include <citro2d.h>
@@ -27,7 +28,7 @@
 #define TITLE_ID_BIGBANG   "000400000010BA00"
 #define TITLE_ID_SUPERNOVA "000400000010BB00"
 #define TEMP_ZIP_PATH  "sdmc:/iego_patch_temp.zip"
-#define LOG_PATH       "sdmc:/3ds/1/debug.log"
+#define LOG_PATH       "sdmc:/3ds/iego_patcher/debug.log"
 
 /* ── Écrans ───────────────────────────────────────────────────────────────── */
 
@@ -42,7 +43,7 @@ static FILE        *s_logfile = NULL;
 static void log_open(void)
 {
     mkdir("sdmc:/3ds", 0777);
-    mkdir("sdmc:/3ds/1", 0777);
+    mkdir("sdmc:/3ds/iego_patcher", 0777);
     s_logfile = fopen(LOG_PATH, "w");
 }
 
@@ -54,12 +55,52 @@ static void log_close(void)
 static void dbg(const char *fmt, ...)
 {
     va_list args;
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    char timebuf[32];
+    if (t) {
+        strftime(timebuf, sizeof(timebuf), "[%H:%M:%S] ", t);
+    } else {
+        snprintf(timebuf, sizeof(timebuf), "[--:--:--] ");
+    }
+
     consoleSelect(&s_console_bot);
+    printf("%s", timebuf);
     va_start(args, fmt); vprintf(fmt, args); va_end(args);
+
     if (s_logfile) {
+        fprintf(s_logfile, "%s", timebuf);
         va_start(args, fmt); vfprintf(s_logfile, fmt, args); va_end(args);
         fflush(s_logfile);
     }
+}
+
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+
+static bool _check_backup(int selection)
+{
+    const char *tid = (selection == 1) ? TITLE_ID_SUPERNOVA : TITLE_ID_BIGBANG;
+    char bak[256];
+    snprintf(bak, sizeof(bak), "sdmc:/luma/titles/%s/romfs.bak", tid);
+    struct stat st;
+    return (stat(bak, &st) == 0);
+}
+
+static bool _restore_backup(int selection)
+{
+    const char *tid = (selection == 1) ? TITLE_ID_SUPERNOVA : TITLE_ID_BIGBANG;
+    char romfs[256], bak[256];
+    snprintf(romfs, sizeof(romfs), "sdmc:/luma/titles/%s/romfs", tid);
+    snprintf(bak, sizeof(bak), "sdmc:/luma/titles/%s/romfs.bak", tid);
+    rename(romfs, "sdmc:/luma/titles/romfs_old_tmp");
+    return (rename(bak, romfs) == 0);
+}
+
+static bool _check_disk_space(void)
+{
+    u64 free_bytes = 0;
+    FSUSER_GetFreeBytes(&free_bytes, ARCHIVE_SDMC);
+    return (free_bytes >= 1200ULL * 1024 * 1024);
 }
 
 /* ── Worker ───────────────────────────────────────────────────────────────── */
@@ -83,6 +124,8 @@ typedef struct {
     int    version_sel;   /* index dans versions[] */
     bool   install_success;
     bool   cancelled;
+    bool   update_alert;
+    char   latest_ver[32];
 } AppState;
 
 static AppState s_state;
@@ -152,8 +195,20 @@ static void _draw_menu_screen(void)
         draw_text(42, 181, "Fubuki Shirou", 0.38f, SN_BLUE);
 
     draw_separator(205, 400, g_theme.accent);
-    draw_text_centered(212, 400, "[A] Selectionner  [START] Quitter",
-                       0.42f, COL_GRAY);
+    
+    char footer[128];
+    snprintf(footer, sizeof(footer), "[A] Sélectionner  [START] Quitter");
+    draw_text_centered(212, 400, footer, 0.42f, COL_GRAY);
+    
+    if (_check_backup(s_state.selection)) {
+        draw_text_centered(228, 400, "[X] Restaurer la sauvegarde", 0.42f, COL_SUCCESS);
+    }
+
+    if (s_state.update_alert) {
+        char up_msg[64];
+        snprintf(up_msg, sizeof(up_msg), "Mise a jour v%s disponible !", s_state.latest_ver);
+        draw_text(10, 10, up_msg, 0.40f, BB_RED);
+    }
 }
 
 static void _draw_version_screen(void)
@@ -342,7 +397,7 @@ static void _draw_result_screen(void)
         draw_text_centered(58,  400, "ERREUR", 0.70f, COL_ERROR);
         draw_separator(85,  400, g_theme.accent);
         draw_text(20, 95,  err_status, 0.44f, COL_GRAY);
-        draw_text(20, 115, "Voir : sdmc:/3ds/1/debug.log", 0.40f, COL_GRAY);
+        draw_text(20, 115, "Voir : sdmc:/3ds/iego_patcher/debug.log", 0.40f, COL_GRAY);
     }
 
     draw_separator(190, 400, g_theme.accent);
@@ -386,7 +441,7 @@ int main(void)
         C2D_SceneBegin(s_top);
         draw_text_centered(100, 400, "ERREUR: Wi-Fi non disponible",
                            0.55f, COL_ERROR);
-        draw_text_centered(125, 400, "Voir sdmc:/3ds/1/debug.log",
+        draw_text_centered(125, 400, "Voir sdmc:/3ds/iego_patcher/debug.log",
                            0.44f, COL_GRAY);
         draw_text_centered(150, 400, "[START] Quitter", 0.44f, COL_GRAY);
         C3D_FrameEnd(0);
@@ -404,9 +459,8 @@ int main(void)
 
     /* ── Boucle principale ─────────────────────────────────────────────────── */
     while (aptMainLoop()) {
-        hidScanInput();
+    	hidScanInput();
         u32 keys      = hidKeysDown();
-        u32 keys_held = hidKeysHeld();
 
         float dt = get_dt();
         stars_update(dt);
@@ -420,25 +474,23 @@ int main(void)
             (wstate == WORKER_DONE || wstate == WORKER_ERROR)) {
             LightLock_Lock(&s_worker.lock);
             int count = s_worker.versions.count;
-            bool upd  = s_worker.versions.update_available;
-            char pver[32];
-            snprintf(pver, sizeof(pver), "%s", s_worker.versions.patcher_latest);
+            s_state.update_alert = s_worker.versions.update_available;
+            snprintf(s_state.latest_ver, sizeof(s_state.latest_ver), "%s", s_worker.versions.patcher_latest);
             LightLock_Unlock(&s_worker.lock);
             dbg("Versions: %d\n", count);
-            if (upd) dbg("Update patcher dispo: %s\n", pver);
+            if (s_state.update_alert) dbg("Mise a jour du patcher dispo: %s\n", s_state.latest_ver);
             worker_join(&s_worker);
             s_state.screen = SCREEN_MENU;
         }
 
         /* PROGRESS → RESULT quand le worker a terminé */
         if (s_state.screen == SCREEN_PROGRESS) {
-            if (keys_held & KEY_B) {
-                dbg("Annulation\n");
+            if (keys & KEY_B) {
+                dbg("Annulation demandee\n");
                 worker_cancel(&s_worker);
-                s_state.cancelled       = true;
-                s_state.install_success = false;
-                s_state.screen = SCREEN_RESULT;
-            } else if (wstate == WORKER_DONE) {
+            }
+
+            if (wstate == WORKER_DONE) {
                 worker_join(&s_worker);
                 s_state.install_success = true;
                 s_state.cancelled       = false;
@@ -470,6 +522,12 @@ int main(void)
                 s_state.selection = 0; theme_set_bigbang();
             } else if (keys & (KEY_DOWN|KEY_RIGHT)) {
                 s_state.selection = 1; theme_set_supernova();
+            } else if (keys & KEY_X) {
+                if (_restore_backup(s_state.selection)) {
+                    dbg("Sauvegarde restauree avec succes !\n");
+                } else {
+                    dbg("Echec de la restauration de la sauvegarde\n");
+                }
             } else if (keys & KEY_START) {
                 goto shutdown;
             }
@@ -500,23 +558,37 @@ int main(void)
 
         case SCREEN_CONFIRM: {
             if (keys & KEY_A) {
+                if (!_check_disk_space()) {
+                    dbg("Espace SD insuffisant (< 1.2 Go)\n");
+                    s_state.install_success = false;
+                    s_state.cancelled = false;
+                    s_state.screen = SCREEN_RESULT;
+                    LightLock_Lock(&s_worker.lock);
+                    snprintf(s_worker.status, sizeof(s_worker.status), "Espace SD insuffisant (< 1.2 Go)");
+                    LightLock_Unlock(&s_worker.lock);
+                    break;
+                }
+
                 WorkerParams params;
                 snprintf(params.temp_zip, sizeof(params.temp_zip), TEMP_ZIP_PATH);
                 snprintf(params.dest,     sizeof(params.dest),     "sdmc:/");
 
                 LightLock_Lock(&s_worker.lock);
                 int count = s_worker.versions.count;
+                params.selection = s_state.selection;
                 if (count > 0 && s_state.version_sel < count) {
                     PatchVersion *v = &s_worker.versions.versions[s_state.version_sel];
                     const char *url = (s_state.selection == 0)
                         ? v->bigbang_url : v->supernova_url;
                     snprintf(params.url, sizeof(params.url), "%s", url);
+                    snprintf(params.version, sizeof(params.version), "%s", v->version);
                     dbg("URL: %s  ver: %s\n", params.url, v->version);
                 } else {
                     snprintf(params.url, sizeof(params.url), "%s",
                         s_state.selection == 0
                         ? "http://iegogalaxy.fr/downloads/patch/latest/patch_bigbang_fr.zip"
                         : "http://iegogalaxy.fr/downloads/patch/latest/patch_supernova_fr.zip");
+                    snprintf(params.version, sizeof(params.version), "latest");
                 }
                 LightLock_Unlock(&s_worker.lock);
 
@@ -568,6 +640,7 @@ int main(void)
 shutdown:
     dbg("=== Fin ===\n");
     worker_cancel(&s_worker);
+    worker_join(&s_worker);
     log_close();
     aptSetSleepAllowed(true);
     network_exit();

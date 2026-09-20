@@ -160,14 +160,15 @@ iego_patcher/
 - ✅ Interface graphique avec thèmes **Big Bang** (bleu) et **Supernova** (violet)
 - ✅ Étoiles animées en arrière-plan
 - ✅ Téléchargement avec **reprise automatique** (HTTP Range requests)
-- ✅ Découpage en tranches de 350 Mo (compatibilité mémoire 3DS)
 - ✅ Barre de progression, débit en temps réel, compteur de reconnexions
 - ✅ Annulation du téléchargement avec `[B]`
+- ✅ Système de **restauration de sauvegarde** (`[X]` dans le menu)
+- ✅ Vérification de l'espace disque disponible (1.2 Go requis)
 - ✅ Anti-veille automatique pendant le téléchargement
-- ✅ Log de debug sur `sdmc:/3ds/1/debug.log`
+- ✅ Log de debug avec horodatage sur `sdmc:/3ds/iego_patcher/debug.log`
 - ✅ Versioning automatique depuis les tags Git
-- 🔜 Sélection de version du patch (historique des versions)
-- 🔜 Auto-update du patcher
+- ✅ Sélection de version du patch (historique des versions)
+- ✅ Auto-update du patcher (détection et alerte visuelle)
 - 🔜 Version CIA (installation dans le menu HOME via FBI)
 
 ---

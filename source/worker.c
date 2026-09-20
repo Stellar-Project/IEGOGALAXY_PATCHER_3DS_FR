@@ -108,6 +108,8 @@ static void _worker_install(WorkerShared *s, const WorkerParams *p)
         p->url,
         p->temp_zip,
         p->dest,
+        p->version,
+        p->selection,
         _status_cb,
         _patcher_progress_cb,
         &ctx
@@ -198,7 +200,6 @@ void worker_cancel(WorkerShared *shared)
 {
     shared->cancel_requested = true;
     network_cancel();
-    worker_join(shared);
 }
 
 void worker_join(WorkerShared *shared)

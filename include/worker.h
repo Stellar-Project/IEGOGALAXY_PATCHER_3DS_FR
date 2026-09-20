@@ -45,6 +45,8 @@ typedef struct {
     char url[256];
     char dest[256];
     char temp_zip[256];
+    char version[32];
+    int  selection;
 } WorkerParams;
 
 /* ── API publique ─────────────────────────────────────────────────────────── */

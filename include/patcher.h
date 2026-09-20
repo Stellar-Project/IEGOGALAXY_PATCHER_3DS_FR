@@ -24,6 +24,8 @@ bool patcher_cleanup(const char *zip_path);
 bool patcher_install(const char *url,
                      const char *temp_zip,
                      const char *dest_dir,
+                     const char *version,
+                     int selection,
                      PatchStatusCb   status_cb,
                      PatchProgressCb progress_cb,
                      void *userdata);
